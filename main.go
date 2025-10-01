@@ -142,9 +142,8 @@ func main() {
 			ansipixels.DrawLine(img, float64(x0), float64(y0), float64(x1), float64(y1), color.NRGBA{255, 255, 255, 255})
 		}
 		draw.Draw(img, image.Rect(1, img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2, barWidth, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
-		newBarWidth := barWidth * 2
-		draw.Draw(img, image.Rect(barWidth+2, img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2, newBarWidth+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
-		draw.Draw(img, image.Rect(newBarWidth+3, img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2, newBarWidth+barWidth+2, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+		draw.Draw(img, image.Rect(barWidth+2, img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2, (barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+		draw.Draw(img, image.Rect((barWidth*2)+3, img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2, (barWidth*2)+barWidth+2, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
 		ap.StartSyncMode()
 
 		if ap.ColorOutput.TrueColor {
@@ -160,7 +159,7 @@ func main() {
 		}
 		ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
 		ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
-		ap.DrawRoundBox(newBarWidth+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
+		ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
 		ap.EndSyncMode()
 		if len(ap.Data) > 0 && ap.Data[0] == 'q' {
 			// return

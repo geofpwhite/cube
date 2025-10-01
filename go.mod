@@ -1,4 +1,4 @@
-module cube
+module github.com/geofpwhite/cube
 
 go 1.24.5
 
