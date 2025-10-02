@@ -29,9 +29,18 @@ var vertices = [8][3]float64{
 }
 
 var edges = [12][2]int{
-	{0, 1}, {1, 2}, {2, 3}, {3, 0},
-	{4, 5}, {5, 6}, {6, 7}, {7, 4},
-	{0, 4}, {1, 5}, {2, 6}, {3, 7},
+	{0, 1},
+	{1, 2},
+	{2, 3},
+	{3, 0},
+	{4, 5},
+	{5, 6},
+	{6, 7},
+	{7, 4},
+	{0, 4},
+	{1, 5},
+	{2, 6},
+	{3, 7},
 }
 
 var faces = [6][4]int{
@@ -124,20 +133,19 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 }
 
 func rotateY(v [3]float64, ay float64) [3]float64 {
-
 	cosa, sina := math.Cos(ay), math.Sin(ay)
 	x := v[0]*cosa + v[2]*sina
 	z := -v[0]*sina + v[2]*cosa
-
 	return [3]float64{x, v[1], z}
 }
+
 func rotateX(v [3]float64, ax float64) [3]float64 {
 	cosa, sina := math.Cos(ax), math.Sin(ax)
 	y := v[1]*cosa - v[2]*sina
 	z := v[1]*sina + v[2]*cosa
-
 	return [3]float64{v[0], y, z}
 }
+
 func rotateZ(v [3]float64, az float64) [3]float64 {
 	cosa, sina := math.Cos(az), math.Sin(az)
 	y := v[1]*cosa - v[0]*sina
@@ -156,7 +164,7 @@ func project(v [3]float64, width, height int, scale float64) (int, int) {
 	return xc, yc
 }
 
-func main() {
+func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop and handles input, it's going to get a little hairy
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
@@ -169,6 +177,7 @@ func main() {
 		ap.ShowCursor()
 		ap.MouseTrackingOff()
 		ap.MouseClickOff()
+		ap.ClearScreen()
 		ap.Restore()
 	}()
 	ap.MouseTrackingOn()
@@ -189,7 +198,6 @@ func main() {
 		return nil
 	}
 	drawCube := func(pts [][2]int) {
-
 		finfos := make([]faceInfo, 0, len(faces))
 		for i, f := range faces {
 			sum := 0.0
@@ -218,95 +226,119 @@ func main() {
 			}
 		}
 	}
-	ap.FPSTicks(context.Background(), func(ctx context.Context) bool {
-		ap.OnResize()
-		clear(img.Pix)
-		barWidth := img.Bounds().Dx() / 20
-		barHeightImg := img.Bounds().Dy() / 3
-		barHeightAp := ap.H / 3
-		pts := make([][2]int, len(vertices))
-		for j, v := range vertices {
-			rv := rotateX(v, angle*xSpeed)
-			rv = rotateY(rv, angle*ySpeed)
-			rv = rotateZ(rv, angle*zSpeed)
-			pts[j][0], pts[j][1] = project(rv, width, height, scale)
-			vertices[j] = rv
-		}
-		if ap.LeftClick() || ap.LeftDrag() {
+	ap.FPSTicks(
+		context.Background(),
+		func(context.Context) bool {
+			clear(img.Pix)
+			barWidth := img.Bounds().Dx() / 20
+			barHeightImg := img.Bounds().Dy() / 3
+			barHeightAp := ap.H / 3
+			pts := make([][2]int, len(vertices))
+			for j, v := range vertices {
+				rv := rotateX(v, angle*xSpeed)
+				rv = rotateY(rv, angle*ySpeed)
+				rv = rotateZ(rv, angle*zSpeed)
+				pts[j][0], pts[j][1] = project(rv, width, height, scale)
+				vertices[j] = rv
+			}
+			lc, ld := ap.LeftClick(), ap.LeftDrag()
 			switch {
-			case ap.Mx > 0 && ap.Mx < barWidth+1:
+			case lc || ld && ap.Mx > 0 && ap.Mx < barWidth+1:
 				if ap.My >= ap.H-barHeightAp {
 					xSpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
-			case ap.Mx > barWidth+1 && ap.Mx < barWidth*2+1:
+			case lc || ld && ap.Mx > barWidth+1 && ap.Mx < barWidth*2+1:
 				if ap.My >= ap.H-barHeightAp {
 					ySpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
-			case ap.Mx > barWidth*2+1 && ap.Mx < barWidth*3+1:
+			case lc || ld && ap.Mx > barWidth*2+1 && ap.Mx < barWidth*3+1:
 				if ap.My >= ap.H-barHeightAp {
 					zSpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
-			default:
+			case ld:
 				xSpeed, ySpeed, zSpeed = 0, 0, 0
-				if ap.LeftDrag() {
-					if prevMousePosition[0] != ap.Mx {
-						for j, v := range vertices {
-							rv := rotateY(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
-							pts[j][0], pts[j][1] = project(rv, width, height, scale)
-							vertices[j] = rv
-						}
-					}
-					if prevMousePosition[1] != ap.My {
-						for j, v := range vertices {
-							rv := rotateX(v, angle*.7*(float64(ap.My-(prevMousePosition[1]))))
-							pts[j][0], pts[j][1] = project(rv, width, height, scale)
-							vertices[j] = rv
-						}
+				if prevMousePosition[0] != ap.Mx {
+					for j, v := range vertices {
+						rv := rotateY(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
+						pts[j][0], pts[j][1] = project(rv, width, height, scale)
+						vertices[j] = rv
 					}
 				}
-
-			}
-		}
-		if ap.RightDrag() {
-			if prevMousePosition[0] != ap.Mx {
-				for j, v := range vertices {
-					rv := rotateZ(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
-					pts[j][0], pts[j][1] = project(rv, width, height, scale)
-					vertices[j] = rv
+				if prevMousePosition[1] != ap.My {
+					for j, v := range vertices {
+						rv := rotateX(v, angle*.7*(float64(ap.My-(prevMousePosition[1]))))
+						pts[j][0], pts[j][1] = project(rv, width, height, scale)
+						vertices[j] = rv
+					}
 				}
 			}
-		}
-		if ap.MouseWheelUp() {
-			scale *= .9
-		}
-		if ap.MouseWheelDown() {
-			scale /= .9
-		}
-		prevMousePosition = [2]int{ap.Mx, ap.My}
-		drawCube(pts)
-		draw.Draw(img, image.Rect(1, img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2, barWidth, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
-		draw.Draw(img, image.Rect(barWidth+2, img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2, (barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
-		draw.Draw(img, image.Rect((barWidth*2)+3, img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2, (barWidth*2)+barWidth+2, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
-		ap.StartSyncMode()
-		if ap.ColorOutput.TrueColor {
-			err := ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+			if ap.RightDrag() {
+				if prevMousePosition[0] != ap.Mx {
+					for j, v := range vertices {
+						rv := rotateZ(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
+						pts[j][0], pts[j][1] = project(rv, width, height, scale)
+						vertices[j] = rv
+					}
+				}
+			}
+			if ap.MouseWheelUp() {
+				scale *= .9
+			}
+			if ap.MouseWheelDown() {
+				scale /= .9
+			}
+			prevMousePosition = [2]int{ap.Mx, ap.My}
+			drawCube(pts)
+			err := DrawSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
 			if err != nil {
 				return false
 			}
-		} else {
-			err := ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-			if err != nil {
+			if len(ap.Data) > 0 && ap.Data[0] == 'q' {
 				return false
 			}
-		}
-		ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
-		ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
-		ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
-		ap.EndSyncMode()
-		if len(ap.Data) > 0 && ap.Data[0] == 'q' {
-			return false
-		}
-		return true
-	})
+			return true
+		},
+	)
+}
 
+func DrawSliders(
+	ap *ansipixels.AnsiPixels,
+	img *image.NRGBA,
+	barWidth, barHeightImg, barHeightAp int,
+	xSpeed, ySpeed, zSpeed float64,
+) error {
+	draw.Draw(img, image.Rect(
+		1,
+		img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2,
+		barWidth,
+		img.Bounds().Dy()-2,
+	), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+	draw.Draw(
+		img,
+		image.Rect(barWidth+2,
+			img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2,
+			(barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+	draw.Draw(img, image.Rect(
+		(barWidth*2)+3,
+		img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2,
+		(barWidth*2)+barWidth+2,
+		img.Bounds().Dy()-2,
+	), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+	ap.StartSyncMode()
+	if ap.ColorOutput.TrueColor {
+		err := ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+		if err != nil {
+			return err
+		}
+	} else {
+		err := ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+		if err != nil {
+			return err
+		}
+	}
+	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.EndSyncMode()
+	return nil
 }
