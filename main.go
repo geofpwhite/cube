@@ -116,6 +116,11 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 			}
 		}
 	}
+	for i := range poly {
+		x0, y0 := poly[i][0], poly[i][1]
+		x1, y1 := poly[(i+1)%len(poly)][0], poly[(i+1)%len(poly)][1]
+		ansipixels.DrawLine(img, float64(x0), float64(y0), float64(x1), float64(y1), color.NRGBA{255, 255, 255, 255})
+	}
 }
 
 func rotateY(v [3]float64, ay float64) [3]float64 {
@@ -176,12 +181,42 @@ func main() {
 	scale := 5.
 	img := image.NewNRGBA(image.Rect(0, 0, width, height*2))
 	prevMousePosition := [2]int{}
-	angle := 2 * math.Pi / float64(frames)
+	angle := math.Pi / float64(frames)
 	ap.OnResize = func() error {
 		width, height = ap.W, ap.H
 		img = image.NewNRGBA(image.Rect(0, 0, width, height*2))
 
 		return nil
+	}
+	drawCube := func(pts [][2]int) {
+
+		finfos := make([]faceInfo, 0, len(faces))
+		for i, f := range faces {
+			sum := 0.0
+			for _, vi := range f {
+				sum += vertices[vi][2]
+			}
+			finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
+		}
+		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ < finfos[j].avgZ })
+		for j := len(finfos) - 1; j > -1; j-- {
+			fi := finfos[j]
+			f := faces[fi.idx]
+			poly := make([][2]int, 0, 4)
+			for _, vi := range f {
+				poly = append(poly, pts[vi])
+			}
+			fillPolygon(img, poly, faceColors[fi.idx])
+		}
+	}
+	if !*colorFlag {
+		drawCube = func(pts [][2]int) {
+			for _, e := range edges {
+				x0, y0 := pts[e[0]][0], pts[e[0]][1]
+				x1, y1 := pts[e[1]][0], pts[e[1]][1]
+				ansipixels.DrawLine(img, float64(x0), float64(y0), float64(x1), float64(y1), color.NRGBA{255, 255, 255, 255})
+			}
+		}
 	}
 	ap.FPSTicks(context.Background(), func(ctx context.Context) bool {
 		ap.OnResize()
@@ -241,7 +276,6 @@ func main() {
 				}
 			}
 		}
-
 		if ap.MouseWheelUp() {
 			scale *= .9
 		}
@@ -249,41 +283,11 @@ func main() {
 			scale /= .9
 		}
 		prevMousePosition = [2]int{ap.Mx, ap.My}
-		if *colorFlag {
-
-			finfos := make([]faceInfo, 0, len(faces))
-			for i, f := range faces {
-				sum := 0.0
-				for _, vi := range f {
-					sum += vertices[vi][2]
-				}
-				finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
-			}
-			sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ < finfos[j].avgZ })
-			for j := len(finfos) - 1; j > -1; j-- {
-				fi := finfos[j]
-				f := faces[fi.idx]
-				poly := make([][2]int, 0, 4)
-				for _, vi := range f {
-					poly = append(poly, pts[vi])
-				}
-				fillPolygon(img, poly, faceColors[fi.idx])
-			}
-
-		}
-		if !*colorFlag {
-
-			for _, e := range edges {
-				x0, y0 := pts[e[0]][0], pts[e[0]][1]
-				x1, y1 := pts[e[1]][0], pts[e[1]][1]
-				ansipixels.DrawLine(img, float64(x0), float64(y0), float64(x1), float64(y1), color.NRGBA{255, 255, 255, 255})
-			}
-		}
+		drawCube(pts)
 		draw.Draw(img, image.Rect(1, img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2, barWidth, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
 		draw.Draw(img, image.Rect(barWidth+2, img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2, (barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
 		draw.Draw(img, image.Rect((barWidth*2)+3, img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2, (barWidth*2)+barWidth+2, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
 		ap.StartSyncMode()
-
 		if ap.ColorOutput.TrueColor {
 			err := ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
 			if err != nil {
