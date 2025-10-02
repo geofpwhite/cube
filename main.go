@@ -136,14 +136,13 @@ func rotateX(v [3]float64, ax float64) [3]float64 {
 func rotateZ(v [3]float64, az float64) [3]float64 {
 	cosa, sina := math.Cos(az), math.Sin(az)
 	y := v[1]*cosa - v[0]*sina
-	// z := v[0]*math.Sin(0) + v[2]*math.Cos(0)
 	x := v[0]*cosa + v[1]*sina
 	return [3]float64{x, y, v[2]}
 }
 
-func project(v [3]float64, width, height int) (int, int) {
+func project(v [3]float64, width, height int, scale float64) (int, int) {
 	distance := 3.0
-	scale := float64(width) / 5.0
+	scale = float64(width) / scale
 	x := v[0] / (v[2] + distance) * scale
 	y := v[1] / (v[2] + distance) * scale
 
@@ -154,10 +153,9 @@ func project(v [3]float64, width, height int) (int, int) {
 
 func main() {
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
-	colorFlag := flag.Bool("color", false, "color the edges of the cube")
+	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
 	ap := ansipixels.NewAnsiPixels(*fpsFlag)
-
 	ap.HideCursor()
 	if ap.Open() != nil {
 		return
@@ -175,11 +173,18 @@ func main() {
 		width, height = ap.W, ap.H
 		frames        = 60
 	)
-
+	scale := 5.
 	img := image.NewNRGBA(image.Rect(0, 0, width, height*2))
 	prevMousePosition := [2]int{}
 	angle := 2 * math.Pi / float64(frames)
+	ap.OnResize = func() error {
+		width, height = ap.W, ap.H
+		img = image.NewNRGBA(image.Rect(0, 0, width, height*2))
+
+		return nil
+	}
 	ap.FPSTicks(context.Background(), func(ctx context.Context) bool {
+		ap.OnResize()
 		clear(img.Pix)
 		barWidth := img.Bounds().Dx() / 20
 		barHeightImg := img.Bounds().Dy() / 3
@@ -189,7 +194,7 @@ func main() {
 			rv := rotateX(v, angle*xSpeed)
 			rv = rotateY(rv, angle*ySpeed)
 			rv = rotateZ(rv, angle*zSpeed)
-			pts[j][0], pts[j][1] = project(rv, width, height)
+			pts[j][0], pts[j][1] = project(rv, width, height, scale)
 			vertices[j] = rv
 		}
 		if ap.LeftClick() || ap.LeftDrag() {
@@ -212,22 +217,38 @@ func main() {
 					if prevMousePosition[0] != ap.Mx {
 						for j, v := range vertices {
 							rv := rotateY(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
-							pts[j][0], pts[j][1] = project(rv, width, height)
+							pts[j][0], pts[j][1] = project(rv, width, height, scale)
 							vertices[j] = rv
 						}
 					}
-					if prevMousePosition[0] != ap.My {
+					if prevMousePosition[1] != ap.My {
 						for j, v := range vertices {
 							rv := rotateX(v, angle*.7*(float64(ap.My-(prevMousePosition[1]))))
-							pts[j][0], pts[j][1] = project(rv, width, height)
+							pts[j][0], pts[j][1] = project(rv, width, height, scale)
 							vertices[j] = rv
 						}
 					}
 				}
+
 			}
-			prevMousePosition = [2]int{ap.Mx, ap.My}
 		}
-		// Draw filled faces using painter's algorithm (sort by average Z)
+		if ap.RightDrag() {
+			if prevMousePosition[0] != ap.Mx {
+				for j, v := range vertices {
+					rv := rotateZ(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
+					pts[j][0], pts[j][1] = project(rv, width, height, scale)
+					vertices[j] = rv
+				}
+			}
+		}
+
+		if ap.MouseWheelUp() {
+			scale *= .9
+		}
+		if ap.MouseWheelDown() {
+			scale /= .9
+		}
+		prevMousePosition = [2]int{ap.Mx, ap.My}
 		if *colorFlag {
 
 			finfos := make([]faceInfo, 0, len(faces))
@@ -250,7 +271,6 @@ func main() {
 			}
 
 		}
-		// Draw edges over filled faces
 		if !*colorFlag {
 
 			for _, e := range edges {
@@ -280,7 +300,6 @@ func main() {
 		ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
 		ap.EndSyncMode()
 		if len(ap.Data) > 0 && ap.Data[0] == 'q' {
-			// return
 			return false
 		}
 		return true
