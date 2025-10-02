@@ -65,6 +65,7 @@ var faceColors = [6]color.NRGBA{
 // fillPolygon fills a convex polygon (or any simple polygon) on an NRGBA image using a scanline algorithm.
 // AI generated bc I got stuck
 func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
+
 	if len(poly) < 3 {
 		return
 	}
@@ -91,17 +92,15 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 	for y := minY; y <= maxY; y++ {
 		var xs []float64
 		n := len(poly)
-		for i := 0; i < n; i++ {
-			x0 := poly[i][0]
-			y0 := poly[i][1]
-			x1 := poly[(i+1)%n][0]
-			y1 := poly[(i+1)%n][1]
-			if y0 == y1 {
-				continue
-			}
+		for i := range n {
+			y := float64(y)
+			x0 := float64(poly[i][0])
+			y0 := float64(poly[i][1])
+			x1 := float64(poly[(i+1)%n][0])
+			y1 := float64(poly[(i+1)%n][1])
 			// include scanline on lower endpoint, exclude on upper to avoid double count
 			if (y >= y0 && y < y1) || (y >= y1 && y < y0) {
-				xf := float64(x0) + (float64(y)-float64(y0))*float64(x1-x0)/float64(y1-y0)
+				xf := x0 + (y-y0)*(x1-x0)/(y1-y0)
 				xs = append(xs, xf)
 			}
 		}
@@ -109,7 +108,7 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 			continue
 		}
 		sort.Float64s(xs)
-		for i := 0; i+1 < len(xs); i += 2 {
+		for i := 0; i < len(xs)-1; i += 2 {
 			xStart := int(math.Ceil(xs[i]))
 			xEnd := int(math.Floor(xs[i+1]))
 			if xStart > img.Rect.Max.X-1 || xEnd < img.Rect.Min.X {
@@ -247,15 +246,15 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 			}
 			lc, ld := ap.LeftClick(), ap.LeftDrag()
 			switch {
-			case lc || ld && ap.Mx > 0 && ap.Mx < barWidth+1:
+			case (lc || ld) && ap.Mx >= 0 && ap.Mx <= barWidth+1:
 				if ap.My >= ap.H-barHeightAp {
 					xSpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
-			case lc || ld && ap.Mx > barWidth+1 && ap.Mx < barWidth*2+1:
+			case (lc || ld) && ap.Mx > barWidth+1 && ap.Mx <= barWidth*2+1:
 				if ap.My >= ap.H-barHeightAp {
 					ySpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
-			case lc || ld && ap.Mx > barWidth*2+1 && ap.Mx < barWidth*3+1:
+			case (lc || ld) && ap.Mx > barWidth*2+1 && ap.Mx <= barWidth*3+1:
 				if ap.My >= ap.H-barHeightAp {
 					zSpeed = float64(ap.H-ap.My) / float64(barHeightAp)
 				}
