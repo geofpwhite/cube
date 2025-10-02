@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -173,12 +174,16 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 	if ap.Open() != nil {
 		return
 	}
+	errMessage := ""
 	defer func() {
 		ap.ShowCursor()
 		ap.MouseTrackingOff()
 		ap.MouseClickOff()
 		ap.ClearScreen()
 		ap.Restore()
+		if len(errMessage) > 0 {
+			fmt.Println(errMessage)
+		}
 	}()
 	ap.MouseTrackingOn()
 	ap.ClearScreen()
@@ -194,7 +199,6 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 	ap.OnResize = func() error {
 		width, height = ap.W, ap.H
 		img = image.NewNRGBA(image.Rect(0, 0, width, height*2))
-
 		return nil
 	}
 	drawCube := func(pts [][2]int) {
@@ -226,7 +230,7 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 			}
 		}
 	}
-	ap.FPSTicks(
+	err := ap.FPSTicks(
 		context.Background(),
 		func(context.Context) bool {
 			clear(img.Pix)
@@ -299,6 +303,9 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 			return true
 		},
 	)
+	if err != nil {
+		errMessage = err.Error()
+	}
 }
 
 func DrawSliders(
