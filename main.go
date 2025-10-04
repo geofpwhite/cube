@@ -20,13 +20,13 @@ type faceInfo struct {
 
 var vertices = [8][3]float64{
 	{-1, -1, -1},
-	{-1, +1, -1},
-	{+1, +1, -1},
-	{+1, -1, -1},
-	{-1, -1, +1},
-	{-1, +1, +1},
-	{+1, +1, +1},
-	{+1, -1, +1},
+	{-1, 1, -1},
+	{1, 1, -1},
+	{1, -1, -1},
+	{-1, -1, 1},
+	{-1, 1, 1},
+	{1, 1, 1},
+	{1, -1, 1},
 }
 
 var edges = [12][2]int{
@@ -62,10 +62,11 @@ var faceColors = [6]color.NRGBA{
 	{50, 200, 200, 255}, // bottom - cyan
 }
 
+var lightSource = [3]float64{1, 0, -1}
+
 // fillPolygon fills a convex polygon (or any simple polygon) on an NRGBA image using a scanline algorithm.
 // AI generated bc I got stuck
 func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
-
 	if len(poly) < 3 {
 		return
 	}
@@ -164,7 +165,7 @@ func project(v [3]float64, width, height int, scale float64) (int, int) {
 	return xc, yc
 }
 
-func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop and handles input, it's going to get a little hairy
+func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main drawing loop and handles input, it's going to get a little hairy
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
@@ -229,10 +230,19 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 			}
 		}
 	}
+	// ap.RequestBackgroundColor()
+	ap.SyncBackgroundColor()
 	err := ap.FPSTicks(
 		context.Background(),
 		func(context.Context) bool {
 			clear(img.Pix)
+			draw.Draw(img, image.Rect(
+				0,
+				0,
+				ap.W,
+				ap.H*2,
+			), &image.Uniform{color.RGBA{ap.Background.R, ap.Background.G, ap.Background.B, 255}}, image.Point{}, draw.Over)
+
 			barWidth := img.Bounds().Dx() / 20
 			barHeightImg := img.Bounds().Dy() / 3
 			barHeightAp := ap.H / 3
@@ -276,6 +286,7 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 				}
 			}
 			if ap.RightDrag() {
+				xSpeed, ySpeed, zSpeed = 0, 0, 0
 				if prevMousePosition[0] != ap.Mx {
 					for j, v := range vertices {
 						rv := rotateZ(v, -angle*.7*(float64(ap.Mx-(prevMousePosition[0]))))
@@ -292,7 +303,7 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 			}
 			prevMousePosition = [2]int{ap.Mx, ap.My}
 			drawCube(pts)
-			err := DrawSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
+			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
 			if err != nil {
 				return false
 			}
@@ -307,7 +318,7 @@ func main() { //nolint:gocognit,gocyclo // this handles the main drawing loop an
 	}
 }
 
-func DrawSliders(
+func drawImageAndSliders(
 	ap *ansipixels.AnsiPixels,
 	img *image.NRGBA,
 	barWidth, barHeightImg, barHeightAp int,
@@ -318,18 +329,18 @@ func DrawSliders(
 		img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2,
 		barWidth,
 		img.Bounds().Dy()-2,
-	), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+	), &image.Uniform{color.RGBA{145, 0, 0, 255}}, image.Point{}, draw.Over)
 	draw.Draw(
 		img,
 		image.Rect(barWidth+2,
 			img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2,
-			(barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+			(barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{0, 145, 0, 255}}, image.Point{}, draw.Over)
 	draw.Draw(img, image.Rect(
 		(barWidth*2)+3,
 		img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2,
 		(barWidth*2)+barWidth+2,
 		img.Bounds().Dy()-2,
-	), &image.Uniform{color.RGBA{255, 0, 255, 255}}, image.Point{}, draw.Over)
+	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
 	ap.StartSyncMode()
 	if ap.ColorOutput.TrueColor {
 		err := ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
@@ -342,6 +353,7 @@ func DrawSliders(
 			return err
 		}
 	}
+	ap.WriteBg(ap.Background.Color())
 	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
