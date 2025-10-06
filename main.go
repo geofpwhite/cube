@@ -342,16 +342,14 @@ func drawImageAndSliders(
 		img.Bounds().Dy()-2,
 	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
 	ap.StartSyncMode()
+	var err error
 	if ap.ColorOutput.TrueColor {
-		err := ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-		if err != nil {
-			return err
-		}
+		err = ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
 	} else {
-		err := ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-		if err != nil {
-			return err
-		}
+		err = ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+	}
+	if err != nil {
+		return err
 	}
 	ap.WriteBg(ap.Background.Color())
 	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
