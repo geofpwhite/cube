@@ -62,7 +62,96 @@ var faceColors = [6]color.NRGBA{
 	{50, 200, 200, 255}, // bottom - cyan
 }
 
-var lightSource = [3]float64{1, 0, -1}
+var lightSource = [3]float64{2, 0, -3}
+
+func dot(a, b [3]float64) float64 {
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+}
+
+func normalize(v [3]float64) [3]float64 {
+	l := math.Sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+	if l == 0 {
+		return v
+	}
+	return [3]float64{v[0] / l, v[1] / l, v[2] / l}
+}
+
+func faceNormal(f [4]int) [3]float64 {
+	v0 := vertices[f[0]]
+	v1 := vertices[f[1]]
+	v2 := vertices[f[2]]
+	e1 := [3]float64{v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]}
+	e2 := [3]float64{v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]}
+	n := [3]float64{
+		e1[1]*e2[2] - e1[2]*e2[1],
+		e1[2]*e2[0] - e1[0]*e2[2],
+		e1[0]*e2[1] - e1[1]*e2[0],
+	}
+	return normalize(n)
+}
+
+// computeVertexNormals calculates a normalized normal vector for each vertex by
+// averaging the normals of all faces that include the vertex. It uses the
+// current (rotated) `vertices` positions, so call this after you transform the
+// cube each frame. Degenerate or zero-length normals are detected with a small
+// epsilon and skipped to avoid NaNs.
+func computeVertexNormals() [8][3]float64 {
+	var vnorms [8][3]float64
+	var counts [8]int
+
+	// accumulate face normals into each vertex
+	for _, f := range faces {
+		n := faceNormal(f)
+		// if normal is degenerate, skip adding it
+		if math.Sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]) < 1e-9 {
+			continue
+		}
+		for _, vi := range f {
+			vnorms[vi][0] += n[0]
+			vnorms[vi][1] += n[1]
+			vnorms[vi][2] += n[2]
+			counts[vi]++
+		}
+	}
+
+	// normalize averaged normals, fallback to face-based normal if zero
+	for i := 0; i < len(vnorms); i++ {
+		if counts[i] == 0 {
+			// fallback: search any face that contains this vertex and use its normal
+			for _, f := range faces {
+				for _, vi := range f {
+					if vi == i {
+						vnorms[i] = faceNormal(f)
+						counts[i] = 1
+						break
+					}
+				}
+				if counts[i] > 0 {
+					break
+				}
+			}
+		}
+		// normalize final vector
+		vnorms[i] = normalize(vnorms[i])
+	}
+
+	return vnorms
+}
+
+func shadeColor(c color.NRGBA, brightness float64) color.NRGBA {
+	if brightness < 0 {
+		brightness = 0
+	}
+	if brightness > 1 {
+		brightness = 1
+	}
+	return color.NRGBA{
+		R: uint8(float64(c.R) * brightness),
+		G: uint8(float64(c.G) * brightness),
+		B: uint8(float64(c.B) * brightness),
+		A: c.A,
+	}
+}
 
 // fillPolygon fills a convex polygon (or any simple polygon) on an NRGBA image using a scanline algorithm.
 // AI generated bc I got stuck
@@ -93,7 +182,7 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 	for y := minY; y <= maxY; y++ {
 		var xs []float64
 		n := len(poly)
-		for i := range n {
+		for i := 0; i < n; i++ {
 			y := float64(y)
 			x0 := float64(poly[i][0])
 			y0 := float64(poly[i][1])
@@ -154,6 +243,94 @@ func rotateZ(v [3]float64, az float64) [3]float64 {
 	return [3]float64{x, y, v[2]}
 }
 
+// interpolate linear between a and b by t
+func lerp(a, b float64, t float64) float64 { return a + (b-a)*t }
+
+// drawTriangleGouraud rasterizes a triangle with per-vertex colors (c0,c1,c2) using
+// simple linear interpolation across scanlines. This is not perspective-correct
+// but is sufficient for small scenes and orthographic-ish projection.
+func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.NRGBA) {
+	// sort vertices by y
+	type pv struct {
+		x, y int
+		c    color.NRGBA
+	}
+	pts := []pv{{p0[0], p0[1], c0}, {p1[0], p1[1], c1}, {p2[0], p2[1], c2}}
+	sort.Slice(pts, func(i, j int) bool { return pts[i].y < pts[j].y })
+
+	// helper to interpolate color between two colors
+	interpCol := func(a, b color.NRGBA, t float64) color.NRGBA {
+		return color.NRGBA{
+			R: uint8(lerp(float64(a.R), float64(b.R), t)),
+			G: uint8(lerp(float64(a.G), float64(b.G), t)),
+			B: uint8(lerp(float64(a.B), float64(b.B), t)),
+			A: uint8(lerp(float64(a.A), float64(b.A), t)),
+		}
+	}
+
+	xa, ya, ca := pts[0].x, pts[0].y, pts[0].c
+	xb, yb, cb := pts[1].x, pts[1].y, pts[1].c
+	xc, yc, cc := pts[2].x, pts[2].y, pts[2].c
+
+	if ya == yc { // degenerate
+		return
+	}
+
+	// rasterize from y=ya to y=yc
+	for y := ya; y <= yc; y++ {
+		if y < img.Rect.Min.Y || y > img.Rect.Max.Y-1 {
+			continue
+		}
+		// compute x on long edge (a->c)
+		tLong := float64(y-ya) / float64(yc-ya)
+		xLong := int(math.Round(lerp(float64(xa), float64(xc), tLong)))
+		cLong := interpCol(ca, cc, tLong)
+
+		var xShort int
+		var cShort color.NRGBA
+
+		if y <= yb && yb != ya { // upper half (a->b)
+			tShort := float64(y-ya) / float64(yb-ya)
+			xShort = int(math.Round(lerp(float64(xa), float64(xb), tShort)))
+			cShort = interpCol(ca, cb, tShort)
+		} else if yb != yc { // lower half (b->c)
+			tShort := float64(y-yb) / float64(yc-yb)
+			xShort = int(math.Round(lerp(float64(xb), float64(xc), tShort)))
+			cShort = interpCol(cb, cc, tShort)
+		}
+		xStart := xShort
+		xEnd := xLong
+		colStart := cShort
+		colEnd := cLong
+		if xStart > xEnd {
+			xStart, xEnd = xEnd, xStart
+			colStart, colEnd = colEnd, colStart
+		}
+
+		if xStart < img.Rect.Min.X {
+			xStart = img.Rect.Min.X
+		}
+		if xEnd > img.Rect.Max.X-1 {
+			xEnd = img.Rect.Max.X - 1
+		}
+
+		width := xEnd - xStart
+		if width < 0 {
+			continue
+		}
+		for x := xStart; x <= xEnd; x++ {
+			var t float64
+			if width == 0 {
+				t = 0
+			} else {
+				t = float64(x-xStart) / float64(width)
+			}
+			col := interpCol(colStart, colEnd, t)
+			img.SetNRGBA(x, y, col)
+		}
+	}
+}
+
 func project(v [3]float64, width, height int, scale float64) (int, int) {
 	distance := 3.0
 	scale = float64(width) / scale
@@ -175,6 +352,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		return
 	}
 	errMessage := ""
+	shades := []string{}
 	defer func() {
 		ap.ShowCursor()
 		ap.MouseTrackingOff()
@@ -184,6 +362,8 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		if len(errMessage) > 0 {
 			fmt.Println(errMessage)
 		}
+		fmt.Println(shades)
+		fmt.Println(computeVertexNormals())
 	}()
 	ap.MouseTrackingOn()
 	ap.ClearScreen()
@@ -201,7 +381,25 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		img = image.NewNRGBA(image.Rect(0, 0, width, height*2))
 		return nil
 	}
+
 	drawCube := func(pts [][2]int) {
+		// finfos := make([]faceInfo, 0, len(faces))
+		// for i, f := range faces {
+		// 	sum := 0.0
+		// 	for _, vi := range f {
+		// 		sum += vertices[vi][2]
+		// 	}
+		// 	finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
+		// }
+		// sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
+		// for _, fi := range finfos {
+		// 	f := faces[fi.idx]
+		// 	poly := make([][2]int, 0, 4)
+		// 	for _, vi := range f {
+		// 		poly = append(poly, pts[vi])
+		// 	}
+		// 	fillPolygon(img, poly, faceColors[fi.idx])
+		// }
 		finfos := make([]faceInfo, 0, len(faces))
 		for i, f := range faces {
 			sum := 0.0
@@ -210,15 +408,52 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 			}
 			finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
 		}
-		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ < finfos[j].avgZ })
-		for j := len(finfos) - 1; j > -1; j-- {
-			fi := finfos[j]
+		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
+
+		// prepare light direction (normalized)
+		ld := normalize(lightSource)
+
+		// compute per-vertex normals once (averaged across adjacent faces)
+		vnorms := computeVertexNormals()
+		ambient := 0.25
+		diffuse := 0.75
+
+		// draw faces as two triangles each with Gouraud shading, but use the face's
+		// base color for all vertex colors for that face. This preserves clear face
+		// colors while allowing brightness to vary per-vertex (smooth shading within a face).
+		for _, fi := range finfos[len(finfos)-3:] {
 			f := faces[fi.idx]
-			poly := make([][2]int, 0, 4)
-			for _, vi := range f {
-				poly = append(poly, pts[vi])
+			// optionally back-face cull using face normal
+			// compute per-vertex shaded colors for this face using the face base color
+			var c0, c1, c2, c3 color.NRGBA
+			ndotl := dot(vnorms[f[0]], ld)
+			if ndotl < 0 {
+				ndotl *= -1
 			}
-			fillPolygon(img, poly, faceColors[fi.idx])
+			c0 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
+
+			ndotl = dot(vnorms[f[1]], ld)
+			if ndotl < 0 {
+				ndotl *= -1
+			}
+			c1 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
+
+			ndotl = dot(vnorms[f[2]], ld)
+			if ndotl < 0 {
+				ndotl *= -1
+			}
+			c2 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
+
+			ndotl = dot(vnorms[f[3]], ld)
+			// if ndotl < 0 {
+			// 	ndotl *= -1
+			// }
+			c3 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
+
+			// triangle 1: f0, f1, f2
+			drawTriangleGouraud(img, pts[f[0]], pts[f[1]], pts[f[2]], c0, c1, c2)
+			// triangle 2: f0, f2, f3
+			drawTriangleGouraud(img, pts[f[0]], pts[f[2]], pts[f[3]], c0, c2, c3)
 		}
 	}
 	if !*colorFlag {
