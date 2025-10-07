@@ -62,7 +62,7 @@ var faceColors = [6]color.NRGBA{
 	{50, 200, 200, 255}, // bottom - cyan
 }
 
-var lightSource = [3]float64{2, 0, -3}
+var lightSource = [3]float64{0, 0, 5}
 
 func dot(a, b [3]float64) float64 {
 	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
@@ -383,23 +383,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 	}
 
 	drawCube := func(pts [][2]int) {
-		// finfos := make([]faceInfo, 0, len(faces))
-		// for i, f := range faces {
-		// 	sum := 0.0
-		// 	for _, vi := range f {
-		// 		sum += vertices[vi][2]
-		// 	}
-		// 	finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
-		// }
-		// sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
-		// for _, fi := range finfos {
-		// 	f := faces[fi.idx]
-		// 	poly := make([][2]int, 0, 4)
-		// 	for _, vi := range f {
-		// 		poly = append(poly, pts[vi])
-		// 	}
-		// 	fillPolygon(img, poly, faceColors[fi.idx])
-		// }
 		finfos := make([]faceInfo, 0, len(faces))
 		for i, f := range faces {
 			sum := 0.0
@@ -410,9 +393,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		}
 		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
 
-		// prepare light direction (normalized)
-		ld := normalize(lightSource)
-
 		// compute per-vertex normals once (averaged across adjacent faces)
 		vnorms := computeVertexNormals()
 		ambient := 0.25
@@ -421,39 +401,33 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		// draw faces as two triangles each with Gouraud shading, but use the face's
 		// base color for all vertex colors for that face. This preserves clear face
 		// colors while allowing brightness to vary per-vertex (smooth shading within a face).
-		for _, fi := range finfos[len(finfos)-3:] {
+		for _, fi := range finfos {
 			f := faces[fi.idx]
-			// optionally back-face cull using face normal
-			// compute per-vertex shaded colors for this face using the face base color
-			var c0, c1, c2, c3 color.NRGBA
-			ndotl := dot(vnorms[f[0]], ld)
-			if ndotl < 0 {
-				ndotl *= -1
-			}
-			c0 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
 
-			ndotl = dot(vnorms[f[1]], ld)
-			if ndotl < 0 {
-				ndotl *= -1
+			// Compute per-vertex shaded colors using the direction from vertex to light
+			var c [4]color.NRGBA
+			for i := 0; i < 4; i++ {
+				// Light direction: from vertex to light source (in world/cube space)
+				lightDir := [3]float64{
+					lightSource[0] - vertices[f[i]][0],
+					lightSource[1] - vertices[f[i]][1],
+					lightSource[2] - vertices[f[i]][2],
+				}
+				lightDir = normalize(lightDir)
+				ndotl := dot(vnorms[f[i]], lightDir)
+				if ndotl < -1 {
+					ndotl /= -ndotl * ndotl
+				}
+				if ndotl < 0 {
+					ndotl *= -1
+				}
+				c[i] = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
 			}
-			c1 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
-
-			ndotl = dot(vnorms[f[2]], ld)
-			if ndotl < 0 {
-				ndotl *= -1
-			}
-			c2 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
-
-			ndotl = dot(vnorms[f[3]], ld)
-			// if ndotl < 0 {
-			// 	ndotl *= -1
-			// }
-			c3 = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
 
 			// triangle 1: f0, f1, f2
-			drawTriangleGouraud(img, pts[f[0]], pts[f[1]], pts[f[2]], c0, c1, c2)
+			drawTriangleGouraud(img, pts[f[0]], pts[f[1]], pts[f[2]], c[0], c[1], c[2])
 			// triangle 2: f0, f2, f3
-			drawTriangleGouraud(img, pts[f[0]], pts[f[2]], pts[f[3]], c0, c2, c3)
+			drawTriangleGouraud(img, pts[f[0]], pts[f[2]], pts[f[3]], c[0], c[2], c[3])
 		}
 	}
 	if !*colorFlag {
