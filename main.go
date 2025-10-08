@@ -62,7 +62,7 @@ var faceColors = [6]color.NRGBA{
 	{50, 200, 200, 255}, // bottom - cyan
 }
 
-var lightSource = [3]float64{0, 0, 5}
+var lightSource = [3]float64{0, -5, 0}
 
 func dot(a, b [3]float64) float64 {
 	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
@@ -182,7 +182,7 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 	for y := minY; y <= maxY; y++ {
 		var xs []float64
 		n := len(poly)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			y := float64(y)
 			x0 := float64(poly[i][0])
 			y0 := float64(poly[i][1])
@@ -250,7 +250,6 @@ func lerp(a, b float64, t float64) float64 { return a + (b-a)*t }
 // simple linear interpolation across scanlines. This is not perspective-correct
 // but is sufficient for small scenes and orthographic-ish projection.
 func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.NRGBA) {
-	// sort vertices by y
 	type pv struct {
 		x, y int
 		c    color.NRGBA
@@ -330,7 +329,6 @@ func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.N
 		}
 	}
 }
-
 func project(v [3]float64, width, height int, scale float64) (int, int) {
 	distance := 3.0
 	scale = float64(width) / scale
@@ -340,6 +338,12 @@ func project(v [3]float64, width, height int, scale float64) (int, int) {
 	xc := int(x) + width/2
 	yc := int(y) + height
 	return xc, yc
+}
+func distanceFromSource(x, y, z float64) float64 {
+	x = max(x-lightSource[0], lightSource[0]-x)
+	y = max(y-lightSource[1], lightSource[1]-y)
+	z = max(z-lightSource[2], lightSource[2]-z)
+	return math.Sqrt((x * x) + (y * y) + (z * z))
 }
 
 func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main drawing loop and handles input, it's going to get a little hairy
@@ -352,7 +356,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		return
 	}
 	errMessage := ""
-	shades := []string{}
 	defer func() {
 		ap.ShowCursor()
 		ap.MouseTrackingOff()
@@ -362,8 +365,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		if len(errMessage) > 0 {
 			fmt.Println(errMessage)
 		}
-		fmt.Println(shades)
-		fmt.Println(computeVertexNormals())
 	}()
 	ap.MouseTrackingOn()
 	ap.ClearScreen()
@@ -394,7 +395,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
 
 		// compute per-vertex normals once (averaged across adjacent faces)
-		vnorms := computeVertexNormals()
+		// vnorms := computeVertexNormals()
 		ambient := 0.25
 		diffuse := 0.75
 
@@ -408,19 +409,20 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 			var c [4]color.NRGBA
 			for i := 0; i < 4; i++ {
 				// Light direction: from vertex to light source (in world/cube space)
-				lightDir := [3]float64{
-					lightSource[0] - vertices[f[i]][0],
-					lightSource[1] - vertices[f[i]][1],
-					lightSource[2] - vertices[f[i]][2],
-				}
-				lightDir = normalize(lightDir)
-				ndotl := dot(vnorms[f[i]], lightDir)
-				if ndotl < -1 {
-					ndotl /= -ndotl * ndotl
-				}
-				if ndotl < 0 {
-					ndotl *= -1
-				}
+				// lightDir := [3]float64{
+				// 	lightSource[0] - vertices[f[i]][0],
+				// 	lightSource[1] - vertices[f[i]][1],
+				// 	lightSource[2] - vertices[f[i]][2],
+				// }
+				// lightDir = normalize(lightDir)
+				// ndotl := dot(vnorms[f[i]], lightDir)
+				// if ndotl < -1 {
+				// 	ndotl /= -ndotl * ndotl
+				// }
+				// if ndotl < 0 {
+				// 	ndotl = -1 / ndotl
+				// }
+				ndotl := 2 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
 				c[i] = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
 			}
 
