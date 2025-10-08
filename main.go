@@ -346,7 +346,47 @@ func distanceFromSource(x, y, z float64) float64 {
 	return math.Sqrt((x * x) + (y * y) + (z * z))
 }
 
-func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main drawing loop and handles input, it's going to get a little hairy
+func drawImageAndSliders(
+	ap *ansipixels.AnsiPixels,
+	img *image.NRGBA,
+	barWidth, barHeightImg, barHeightAp int,
+	xSpeed, ySpeed, zSpeed float64,
+) error {
+	draw.Draw(img, image.Rect(
+		1,
+		img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2,
+		barWidth,
+		img.Bounds().Dy()-2,
+	), &image.Uniform{color.RGBA{145, 0, 0, 255}}, image.Point{}, draw.Over)
+	draw.Draw(
+		img,
+		image.Rect(barWidth+2,
+			img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2,
+			(barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{0, 145, 0, 255}}, image.Point{}, draw.Over)
+	draw.Draw(img, image.Rect(
+		(barWidth*2)+3,
+		img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2,
+		(barWidth*2)+barWidth+2,
+		img.Bounds().Dy()-2,
+	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
+	ap.StartSyncMode()
+	var err error
+	if ap.ColorOutput.TrueColor {
+		err = ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+	} else {
+		err = ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
+	}
+	if err != nil {
+		return err
+	}
+	ap.WriteBg(ap.Background.Color())
+	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
+	ap.EndSyncMode()
+	return nil
+}
+func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the main drawing loop and handles input, it's going to get a little hairy
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
@@ -395,34 +435,18 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
 
 		// compute per-vertex normals once (averaged across adjacent faces)
-		// vnorms := computeVertexNormals()
 		ambient := 0.25
 		diffuse := 0.75
 
 		// draw faces as two triangles each with Gouraud shading, but use the face's
 		// base color for all vertex colors for that face. This preserves clear face
-		// colors while allowing brightness to vary per-vertex (smooth shading within a face).
+		// colors while allowing brightness to vary per-vertex (smooth shading within a face). //sometimes ai makes good comments
 		for _, fi := range finfos {
 			f := faces[fi.idx]
 
-			// Compute per-vertex shaded colors using the direction from vertex to light
 			var c [4]color.NRGBA
-			for i := 0; i < 4; i++ {
-				// Light direction: from vertex to light source (in world/cube space)
-				// lightDir := [3]float64{
-				// 	lightSource[0] - vertices[f[i]][0],
-				// 	lightSource[1] - vertices[f[i]][1],
-				// 	lightSource[2] - vertices[f[i]][2],
-				// }
-				// lightDir = normalize(lightDir)
-				// ndotl := dot(vnorms[f[i]], lightDir)
-				// if ndotl < -1 {
-				// 	ndotl /= -ndotl * ndotl
-				// }
-				// if ndotl < 0 {
-				// 	ndotl = -1 / ndotl
-				// }
-				ndotl := 2 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
+			for i := range 4 {
+				ndotl := 1.9 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
 				c[i] = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
 			}
 
@@ -527,45 +551,4 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 	if err != nil {
 		errMessage = err.Error()
 	}
-}
-
-func drawImageAndSliders(
-	ap *ansipixels.AnsiPixels,
-	img *image.NRGBA,
-	barWidth, barHeightImg, barHeightAp int,
-	xSpeed, ySpeed, zSpeed float64,
-) error {
-	draw.Draw(img, image.Rect(
-		1,
-		img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2,
-		barWidth,
-		img.Bounds().Dy()-2,
-	), &image.Uniform{color.RGBA{145, 0, 0, 255}}, image.Point{}, draw.Over)
-	draw.Draw(
-		img,
-		image.Rect(barWidth+2,
-			img.Bounds().Dy()-(int(ySpeed*float64(barHeightImg)))-2,
-			(barWidth*2)+1, img.Bounds().Dy()-2), &image.Uniform{color.RGBA{0, 145, 0, 255}}, image.Point{}, draw.Over)
-	draw.Draw(img, image.Rect(
-		(barWidth*2)+3,
-		img.Bounds().Dy()-(int(zSpeed*float64(barHeightImg)))-2,
-		(barWidth*2)+barWidth+2,
-		img.Bounds().Dy()-2,
-	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
-	ap.StartSyncMode()
-	var err error
-	if ap.ColorOutput.TrueColor {
-		err = ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-	} else {
-		err = ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-	}
-	if err != nil {
-		return err
-	}
-	ap.WriteBg(ap.Background.Color())
-	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
-	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
-	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
-	ap.EndSyncMode()
-	return nil
 }
