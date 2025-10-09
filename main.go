@@ -306,12 +306,8 @@ func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.N
 			colStart, colEnd = colEnd, colStart
 		}
 
-		if xStart < img.Rect.Min.X {
-			xStart = img.Rect.Min.X
-		}
-		if xEnd > img.Rect.Max.X-1 {
-			xEnd = img.Rect.Max.X - 1
-		}
+		xStart = max(xStart, img.Rect.Min.X)
+		xEnd = min(img.Rect.Max.X-1, xEnd)
 
 		width := xEnd - xStart
 		if width < 0 {
@@ -446,8 +442,8 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 
 			var c [4]color.NRGBA
 			for i := range 4 {
-				ndotl := 1.9 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
-				c[i] = shadeColor(faceColors[fi.idx], ambient+(diffuse*ndotl))
+				intensity := 1.9 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
+				c[i] = shadeColor(faceColors[fi.idx], ambient+(diffuse*intensity))
 			}
 
 			// triangle 1: f0, f1, f2
