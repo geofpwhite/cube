@@ -1,6 +1,6 @@
 module github.com/geofpwhite/cube
 
-go 1.25.2
+go 1.24.0
 
 require fortio.org/terminal v0.57.1
 
