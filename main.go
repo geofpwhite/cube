@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"image"
@@ -233,15 +232,19 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll // this handles the main draw
 	// ap.RequestBackgroundColor()
 	ap.SyncBackgroundColor()
 	err := ap.FPSTicks(
-		context.Background(),
-		func(context.Context) bool {
+		func() bool {
 			clear(img.Pix)
-			draw.Draw(img, image.Rect(
-				0,
-				0,
-				ap.W,
-				ap.H*2,
-			), &image.Uniform{color.RGBA{ap.Background.R, ap.Background.G, ap.Background.B, 255}}, image.Point{}, draw.Over)
+			draw.Draw(
+				img,
+				image.Rect(
+					0,
+					0,
+					ap.W,
+					ap.H*2,
+				),
+				&image.Uniform{color.RGBA{ap.Background.R, ap.Background.G, ap.Background.B, 255}},
+				image.Point{},
+				draw.Over)
 
 			barWidth := img.Bounds().Dx() / 20
 			barHeightImg := img.Bounds().Dy() / 3
