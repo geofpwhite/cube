@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"image"
@@ -347,6 +346,7 @@ func drawImageAndSliders(
 	img *image.NRGBA,
 	barWidth, barHeightImg, barHeightAp int,
 	xSpeed, ySpeed, zSpeed float64,
+	truecolor bool,
 ) error {
 	draw.Draw(img, image.Rect(
 		1,
@@ -367,7 +367,7 @@ func drawImageAndSliders(
 	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
 	ap.StartSyncMode()
 	var err error
-	if ap.ColorOutput.TrueColor {
+	if truecolor {
 		err = ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
 	} else {
 		err = ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
@@ -383,6 +383,7 @@ func drawImageAndSliders(
 	return nil
 }
 func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the main drawing loop and handles input, it's going to get a little hairy
+	trueColorFlag := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor, "use truecolor colors instead of the 216 color mode")
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
@@ -464,8 +465,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 	// ap.RequestBackgroundColor()
 	ap.SyncBackgroundColor()
 	err := ap.FPSTicks(
-		context.Background(),
-		func(context.Context) bool {
+		func() bool {
 			clear(img.Pix)
 			draw.Draw(img, image.Rect(
 				0,
@@ -534,7 +534,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 			prevMousePosition = [2]int{ap.Mx, ap.My}
 			drawCube(pts)
-			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
+			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed, *trueColorFlag)
 			if err != nil {
 				return false
 			}

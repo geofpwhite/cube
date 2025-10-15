@@ -2,7 +2,7 @@ module github.com/geofpwhite/cube
 
 go 1.24.0
 
-require fortio.org/terminal v0.57.1
+require fortio.org/terminal v0.60.1
 
 require (
 	fortio.org/log v1.18.1 // indirect
@@ -11,7 +11,7 @@ require (
 	github.com/jbuchbinder/gopnm v0.0.0-20220507095634-e31f54490ce0 // indirect
 	github.com/kortschak/goroutine v1.1.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/image v0.31.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.35.0 // indirect
+	golang.org/x/image v0.32.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/term v0.36.0 // indirect
 )
