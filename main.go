@@ -191,7 +191,6 @@ func drawImageAndSliders(
 	img *image.NRGBA,
 	barWidth, barHeightImg, barHeightAp int,
 	xSpeed, ySpeed, zSpeed float64,
-	truecolor bool,
 ) error {
 	draw.Draw(img, image.Rect(
 		1,
@@ -210,30 +209,25 @@ func drawImageAndSliders(
 		(barWidth*2)+barWidth+2,
 		img.Bounds().Dy()-2,
 	), &image.Uniform{color.RGBA{0, 0, 145, 255}}, image.Point{}, draw.Over)
-	ap.StartSyncMode()
 	// ap.WriteBg(ap.Background.Color())
-	var err error
-	if truecolor {
-		err = ap.DrawTrueColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-	} else {
-		err = ap.Draw216ColorImage(0, 0, &image.RGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect})
-	}
-	if err != nil {
-		return err
-	}
-	ap.WriteBg(ap.Background.Color())
+	ap.ClearScreen()
+	dst := image.NewRGBA(img.Bounds())
+	draw.Draw(dst, img.Bounds(), img, image.Point{}, draw.Src)
+	_ = ap.ShowScaledImage(dst)
 	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
-	ap.EndSyncMode()
 	return nil
 }
+
 func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the main drawing loop and handles input, it's going to get a little hairy
-	trueColorFlag := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor, "use truecolor colors instead of the 216 color mode")
+	trueColorFlag := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor,
+		"use truecolor colors instead of the 216 color mode")
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	colorFlag := flag.Bool("color", false, "color the faces of the cube")
 	flag.Parse()
 	ap := ansipixels.NewAnsiPixels(*fpsFlag)
+	ap.TrueColor = *trueColorFlag
 	ap.HideCursor()
 	if ap.Open() != nil {
 		return
@@ -243,14 +237,12 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 		ap.ShowCursor()
 		ap.MouseTrackingOff()
 		ap.MouseClickOff()
-		ap.ClearScreen()
 		ap.Restore()
 		if len(errMessage) > 0 {
 			fmt.Println(errMessage)
 		}
 	}()
 	ap.MouseTrackingOn()
-	ap.ClearScreen()
 	xSpeed, ySpeed, zSpeed := .5, .5, .5
 	var (
 		width, height = ap.W, ap.H
@@ -312,15 +304,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 	err := ap.FPSTicks(
 		func() bool {
 			clear(img.Pix)
-			if *trueColorFlag {
-				draw.Draw(img, image.Rect(
-					0,
-					0,
-					ap.W,
-					ap.H*2,
-				), &image.Uniform{color.RGBA{ap.Background.R, ap.Background.G, ap.Background.B, 255}}, image.Point{}, draw.Over)
-			}
-
 			barWidth := img.Bounds().Dx() / 20
 			barHeightImg := img.Bounds().Dy() / 3
 			barHeightAp := ap.H / 3
@@ -381,7 +364,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 			prevMousePosition = [2]int{ap.Mx, ap.My}
 			drawCube(pts)
-			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed, *trueColorFlag)
+			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
 			if err != nil {
 				return false
 			}
