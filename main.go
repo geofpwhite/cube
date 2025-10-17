@@ -308,7 +308,6 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 		}
 	}
-	// ap.RequestBackgroundColor()
 	ap.SyncBackgroundColor()
 	err := ap.FPSTicks(
 		func() bool {
