@@ -54,7 +54,7 @@ var FaceColors = [6]color.NRGBA{
 	{50, 200, 200, 255}, // bottom - cyan
 }
 
-var LightSource = [3]float64{0, -5, 0}
+var LightSource = [3]float64{4, -2, 0}
 
 func rotateY(v [3]float64, ay float64) [3]float64 {
 	cosa, sina := math.Cos(ay), math.Sin(ay)
