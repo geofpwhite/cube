@@ -7,7 +7,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
-	"sort"
+	"slices"
 
 	"fortio.org/terminal/ansipixels"
 )
@@ -120,7 +120,7 @@ func fillPolygon(img *image.NRGBA, poly [][2]int, col color.NRGBA) {
 		if len(xs) < 2 {
 			continue
 		}
-		sort.Float64s(xs)
+		slices.Sort(xs)
 		for i := 0; i < len(xs)-1; i += 2 {
 			xStart := int(math.Ceil(xs[i]))
 			xEnd := int(math.Floor(xs[i+1]))
@@ -154,7 +154,7 @@ func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.N
 		c    color.NRGBA
 	}
 	pts := []pv{{p0[0], p0[1], c0}, {p1[0], p1[1], c1}, {p2[0], p2[1], c2}}
-	sort.Slice(pts, func(i, j int) bool { return pts[i].y < pts[j].y })
+	slices.SortFunc(pts, func(i, j pv) int { return i.y - j.y })
 
 	// helper to interpolate color between two colors
 	interpCol := func(a, b color.NRGBA, t float64) color.NRGBA {
@@ -248,7 +248,7 @@ func phongIntensity(pos, n, viewPos [3]float64) float64 {
 	spec := ks * math.Pow(ndoth, shininess)
 
 	d := distanceFromSource(pos[0], pos[1], pos[2])
-	attenuation := 1.0 / (1.0 + 0.2*d + 0.02*d*d)
+	attenuation := 1.0 / (1.0 + 0.1*d + 0.01*d*d)
 	intensity := ambientStrength + attenuation*(diffuse+spec)
 	// intensity := ambientStrength + attenuation*(diffuse)
 
@@ -363,14 +363,32 @@ func drawImageAndSliders(
 	return nil
 }
 
-func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the main drawing loop and handles input, it's going to get a little hairy
+type config struct {
+	trueColor bool
+	fps       float64
+	border    bool
+	color     bool
+}
+
+func configure() config {
 	trueColorFlag := flag.Bool("truecolor", ansipixels.DetectColorMode().TrueColor,
 		"use truecolor colors instead of the 216 color mode")
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
-	colorFlag := flag.Bool("color", false, "color the faces of the cube")
+	wireFlag := flag.Bool("wire", false, "make the faces of the cube transparent and show a wireframe")
+	borderFlag := flag.Bool("border", false, "show a white border around visible cube edges in color mode (does nothing without -color flag being used)") //nolint:lll // line is long because description is long
 	flag.Parse()
-	ap := ansipixels.NewAnsiPixels(*fpsFlag)
-	ap.TrueColor = *trueColorFlag
+	return config{
+		trueColor: *trueColorFlag,
+		color:     !*wireFlag,
+		border:    *borderFlag,
+		fps:       *fpsFlag,
+	}
+}
+
+func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the main drawing loop and handles input, it's going to get a little hairy
+	c := configure()
+	ap := ansipixels.NewAnsiPixels(c.fps)
+	ap.TrueColor = c.trueColor
 	ap.HideCursor()
 	if ap.Open() != nil {
 		return
@@ -386,7 +404,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 		}
 	}()
 	ap.MouseTrackingOn()
-	xSpeed, ySpeed, zSpeed := .5, .5, .5
+	xSpeed, ySpeed, zSpeed := .5, .85, .2
 	var (
 		width, height = ap.W, ap.H
 		frames        = 60
@@ -418,7 +436,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 			finfos = append(finfos, faceInfo{i, sum / float64(len(f))})
 		}
-		sort.Slice(finfos, func(i, j int) bool { return finfos[i].avgZ > finfos[j].avgZ })
+		slices.SortFunc(finfos, func(i, j faceInfo) int { return -int((i.avgZ - j.avgZ) * 100) })
 
 		ambient := 0.25
 		diffuse := 0.75
@@ -428,7 +446,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			vnorms := computeVertexNormals()
 			viewPos := [3]float64{0, 0, 0}
 
-			for _, fi := range finfos[3:] {
+			for _, fi := range finfos {
 				f := Faces[fi.idx]
 
 				// triangle 1: f0, f1, f2
@@ -461,7 +479,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 		}
 	}
-	if !*colorFlag {
+	if !c.color {
 		drawCube = func(pts [][2]int) {
 			for _, e := range Edges {
 				x0, y0 := pts[e[0]][0], pts[e[0]][1]
