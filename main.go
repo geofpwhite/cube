@@ -260,8 +260,11 @@ func phongIntensity(pos, n, viewPos [3]float64) float64 {
 }
 func naiveIntensity(pos [3]float64) float64 {
 	d := distanceFromSource(pos[0], pos[1], pos[2])
-	naiveIntensity := (-(d - 4.45) / 6.)
-	return max(naiveIntensity, 0.)
+	intensity := (-(d - 4.45) / 6.)
+	if intensity < .05 {
+		intensity = .05
+	}
+	return max(intensity, 0.)
 }
 
 func drawTriangleNaive(img *image.NRGBA, p0, p1, p2 [2]int, pos0, pos1, pos2, n0, n1, n2 [3]float64, base color.NRGBA) {
