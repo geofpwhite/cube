@@ -419,6 +419,7 @@ type config struct {
 	fps       float64
 	border    bool
 	color     bool
+	export    bool
 }
 
 func configure() config {
@@ -426,6 +427,7 @@ func configure() config {
 		"use truecolor colors instead of the 216 color mode")
 	fpsFlag := flag.Float64("fps", 60, "set the fps for the animation")
 	wireFlag := flag.Bool("wire", false, "make the faces of the cube transparent and show a wireframe")
+	exportFlag := flag.Bool("export", false, "export the cube's rotations to a gif")
 	borderFlag := flag.Bool("border", false, "show a white border around visible cube edges in color mode (does nothing without -color flag being used)") //nolint:lll // line is long because description is long
 	flag.Parse()
 	return config{
@@ -433,6 +435,7 @@ func configure() config {
 		color:     !*wireFlag,
 		border:    *borderFlag,
 		fps:       *fpsFlag,
+		export:    *exportFlag,
 	}
 }
 
@@ -537,6 +540,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 		}
 	}
 	ap.SyncBackgroundColor()
+	imgs := []image.NRGBA{}
 	err := ap.FPSTicks(
 		func() bool {
 			clear(img.Pix)
@@ -601,6 +605,11 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			prevMousePosition = [2]int{ap.Mx, ap.My}
 			drawCube(pts)
 			drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
+			if c.export {
+				frameImg := image.NewNRGBA(img.Bounds())
+				copy(frameImg.Pix, img.Pix)
+				imgs = append(imgs, *frameImg)
+			}
 
 			if len(ap.Data) > 0 && ap.Data[0] == 'q' {
 				return false
@@ -611,5 +620,10 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 	)
 	if err != nil {
 		errMessage = err.Error()
+	}
+	if c.export {
+		if err = exportToGif(imgs, c.fps); err != nil {
+			errMessage += " " + err.Error()
+		}
 	}
 }
