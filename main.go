@@ -493,7 +493,7 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			// per-pixel Phong: compute per-vertex normals and rasterize with per-pixel shading
 			vnorms := computeVertexNormals()
 
-			for _, fi := range finfos {
+			for _, fi := range finfos[len(finfos)-3:] {
 				f := Faces[fi.idx]
 
 				// triangle 1: f0, f1, f2
