@@ -228,7 +228,7 @@ func drawTriangleGouraud(img *image.NRGBA, p0, p1, p2 [2]int, c0, c1, c2 color.N
 // phongIntensity computes Blinn-Phong intensity (0..1) for a point.
 func phongIntensity(pos, n, viewPos [3]float64) float64 {
 	ambientStrength := 0.1
-	ks := 0.6
+	ks := 0.9
 	shininess := 64.
 
 	L := normalize([3]float64{LightSource[0] - pos[0], LightSource[1] - pos[1], LightSource[2] - pos[2]})
@@ -237,7 +237,7 @@ func phongIntensity(pos, n, viewPos [3]float64) float64 {
 
 	ndotl := dot(n, L)
 	if ndotl < 0 {
-		ndotl = 0
+		ndotl *= 0
 	}
 	diffuse := ndotl
 
@@ -254,16 +254,64 @@ func phongIntensity(pos, n, viewPos [3]float64) float64 {
 
 	// intensity := ambientStrength + (diffuse)
 	if intensity < 0 {
-		intensity = 0
+		intensity *= 0
 	}
 	return intensity
 }
+func naiveIntensity(pos [3]float64) float64 {
+	d := distanceFromSource(pos[0], pos[1], pos[2])
+	naiveIntensity := (-(d - 4.45) / 6.)
+	return max(naiveIntensity, 0.)
+}
 
-// drawTrianglePhong rasterizes a triangle and performs per-pixel Phong shading.
-// pos0..pos2 are the 3D positions corresponding to p0..p2 in the same space as LightSource.
-// n0..n2 are per-vertex normals.
-func drawTrianglePhong(img *image.NRGBA, p0, p1, p2 [2]int, pos0, pos1, pos2, n0, n1, n2 [3]float64, base color.NRGBA, viewPos [3]float64) {
-	// bounding box
+func drawTriangleNaive(img *image.NRGBA, p0, p1, p2 [2]int, pos0, pos1, pos2, n0, n1, n2 [3]float64, base color.NRGBA) {
+	minX := max(min(p0[0], p1[0]), img.Rect.Min.X)
+	maxX := min(max(p0[0], p1[0]), img.Rect.Max.X-1)
+	if p2[0] < minX {
+		minX = max(min(p2[0], minX), img.Rect.Min.X)
+	}
+	if p2[0] > maxX {
+		maxX = min(max(p2[0], maxX), img.Rect.Max.X-1)
+	}
+	minY := max(min(p0[1], p1[1]), img.Rect.Min.Y)
+	maxY := min(max(p0[1], p1[1]), img.Rect.Max.Y-1)
+	if p2[1] < minY {
+		minY = max(min(p2[1], minY), img.Rect.Min.Y)
+	}
+	if p2[1] > maxY {
+		maxY = min(max(p2[1], maxY), img.Rect.Max.Y-1)
+	}
+
+	ax, ay := float64(p0[0]), float64(p0[1])
+	bx, by := float64(p1[0]), float64(p1[1])
+	cx, cy := float64(p2[0]), float64(p2[1])
+
+	denom := (by-cy)*(ax-cx) + (cx-bx)*(ay-cy)
+	if denom == 0 {
+		return
+	}
+
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			fx, fy := float64(x), float64(y)
+			w0 := ((by-cy)*(fx-cx) + (cx-bx)*(fy-cy)) / denom
+			w1 := ((cy-ay)*(fx-cx) + (ax-cx)*(fy-cy)) / denom
+			w2 := 1 - w0 - w1
+			if w0 < 0 || w1 < 0 || w2 < 0 {
+				continue
+			}
+			pos := [3]float64{
+				pos0[0]*w0 + pos1[0]*w1 + pos2[0]*w2,
+				pos0[1]*w0 + pos1[1]*w1 + pos2[1]*w2,
+				pos0[2]*w0 + pos1[2]*w1 + pos2[2]*w2,
+			}
+			intensity := naiveIntensity(pos)
+			col := shadeColorTrue(base, intensity)
+			img.SetNRGBA(x, y, col)
+		}
+	}
+}
+func drawTrianglePhong(img *image.NRGBA, p0, p1, p2 [2]int, pos0, pos1, pos2, n0, n1, n2 [3]float64, base color.NRGBA) {
 	minX := max(min(p0[0], p1[0]), img.Rect.Min.X)
 	maxX := min(max(p0[0], p1[0]), img.Rect.Max.X-1)
 	if p2[0] < minX {
@@ -313,7 +361,8 @@ func drawTrianglePhong(img *image.NRGBA, p0, p1, p2 [2]int, pos0, pos1, pos2, n0
 			}
 			n = normalize(n)
 
-			intensity := phongIntensity(pos, n, viewPos)
+			// intensity := naiveIntensity(pos)
+			intensity := phongIntensity(pos, n, [3]float64{0, 0, 0})
 			col := shadeColorTrue(base, intensity)
 			img.SetNRGBA(x, y, col)
 		}
@@ -335,7 +384,7 @@ func drawImageAndSliders(
 	img *image.NRGBA,
 	barWidth, barHeightImg, barHeightAp int,
 	xSpeed, ySpeed, zSpeed float64,
-) error {
+) {
 	draw.Draw(img, image.Rect(
 		1,
 		img.Bounds().Dy()-(int(xSpeed*float64(barHeightImg)))-2,
@@ -360,7 +409,6 @@ func drawImageAndSliders(
 	ap.DrawRoundBox(0, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox(barWidth+1, ap.H-barHeightAp, barWidth+1, barHeightAp)
 	ap.DrawRoundBox((barWidth*2)+2, ap.H-barHeightAp, barWidth+1, barHeightAp)
-	return nil
 }
 
 type config struct {
@@ -438,37 +486,34 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 		}
 		slices.SortFunc(finfos, func(i, j faceInfo) int { return -int((i.avgZ - j.avgZ) * 100) })
 
-		ambient := 0.25
-		diffuse := 0.75
-
 		if ap.TrueColor {
 			// per-pixel Phong: compute per-vertex normals and rasterize with per-pixel shading
 			vnorms := computeVertexNormals()
-			viewPos := [3]float64{0, 0, 0}
 
 			for _, fi := range finfos {
 				f := Faces[fi.idx]
 
 				// triangle 1: f0, f1, f2
-				drawTrianglePhong(img, pts[f[0]], pts[f[1]], pts[f[2]],
+				drawTriangleNaive(img, pts[f[0]], pts[f[1]], pts[f[2]],
 					vertices[f[0]], vertices[f[1]], vertices[f[2]],
 					vnorms[f[0]], vnorms[f[1]], vnorms[f[2]],
-					FaceColors[fi.idx], viewPos)
+					FaceColors[fi.idx])
 
 				// triangle 2: f0, f2, f3
-				drawTrianglePhong(img, pts[f[0]], pts[f[2]], pts[f[3]],
+				drawTriangleNaive(img, pts[f[0]], pts[f[2]], pts[f[3]],
 					vertices[f[0]], vertices[f[2]], vertices[f[3]],
 					vnorms[f[0]], vnorms[f[2]], vnorms[f[3]],
-					FaceColors[fi.idx], viewPos)
+					FaceColors[fi.idx])
 			}
 		} else {
-			// Gouraud shading path (existing behavior)
+			ambient := 0.25
+			diffuse := 0.75
 			for _, fi := range finfos {
 				f := Faces[fi.idx]
 
 				var c [4]color.NRGBA
 				for i := range 4 {
-					intensity := 1.9 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
+					intensity := 1.6 / distanceFromSource(vertices[f[i]][0], vertices[f[i]][1], vertices[f[i]][2])
 					c[i] = shadeFn(FaceColors[fi.idx], ambient+(diffuse*intensity))
 				}
 
@@ -552,13 +597,12 @@ func main() { //nolint:gocognit,gocyclo,funlen,lll,maintidx // this handles the 
 			}
 			prevMousePosition = [2]int{ap.Mx, ap.My}
 			drawCube(pts)
-			err := drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
-			if err != nil {
-				return false
-			}
+			drawImageAndSliders(ap, img, barWidth, barHeightImg, barHeightAp, xSpeed, ySpeed, zSpeed)
+
 			if len(ap.Data) > 0 && ap.Data[0] == 'q' {
 				return false
 			}
+			ap.WriteAt(1, 1, "%v", LightSource)
 			return true
 		},
 	)
